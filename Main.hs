@@ -105,7 +105,7 @@ module Main where
   parseIf :: Parser BitsyExpr
   parseIf = do
     spaces
-    t <- word
+    t <- (try (string "IFP")) <|> (try (string "IFZ")) <|> (try (string "IFN"))
     spaces
     expr <- (try parseExpr) <|> (try parseLiteral)
     newline
@@ -131,6 +131,8 @@ module Main where
     string "BEGIN"
     newline
     mainBlock <- parseBlock
+    newlines
+    string "END"
     return $ BProgram comm [mainBlock]
 
   main :: IO ()
