@@ -1,6 +1,6 @@
 module Main where
   import Text.ParserCombinators.Parsec hiding (spaces)
-  
+
   data BitsyExpr = BProgram [BitsyExpr] BitsyExpr -- COMMENTS BEGIN block END
                  | BBlock [BitsyExpr] -- [if | loop | break | print | read | assign]
                  | BIf String BitsyExpr [BitsyExpr] -- keyword (IFZ | IFP | IFN) expr block else-block ended by END
@@ -85,16 +85,17 @@ module Main where
 
   parseExpr :: Parser BitsyExpr
   parseExpr = do
-    num1 <- number
+    num1 <- (try number) <|> (try parseVar)
     spaces
     op <- oneOf ['+', '-', '*', '/']
     spaces
-    num2 <- number
+    num2 <- (try number) <|> (try parseVar)
     let op' = case op of
                 '+' -> BAdd "+"
                 '-' -> BSub "-"
                 '*' -> BMul "*"
                 '/' -> BDiv "/"
+    newlines
     return $ BExpression num1 op' num2
 
   parseIf :: Parser BitsyExpr
@@ -102,7 +103,7 @@ module Main where
     spaces
     t <- word
     spaces
-    expr <- parseExpr
+    expr <- (try parseExpr) <|> (try parseLiteral)
     newline
     b <- parseBlock
     spaces
@@ -117,7 +118,7 @@ module Main where
 
   parseBlock :: Parser BitsyExpr
   parseBlock = do
-    exprs <- many1 $ (try parseIf) <|> (try parseLoop) <|> (try parseRead) <|> (try parsePrint) <|> (try parseAssign) <|> (try parseBreak)
+    exprs <- many1 $ (try parseIf) <|> (try parseLoop) <|> (try parseRead) <|> (try parsePrint) <|> (try parseAssign) <|> (try parseBreak) <|> (try parseBreak) <|> (try parseExpr)
     return $ BBlock exprs
 
   parseProgram :: Parser BitsyExpr
