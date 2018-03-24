@@ -1,6 +1,6 @@
 module Main where
   import Text.ParserCombinators.Parsec hiding (spaces)
-
+  
   data BitsyExpr = BProgram [BitsyExpr] BitsyExpr -- COMMENTS BEGIN block END
                  | BBlock [BitsyExpr] -- [if | loop | break | print | read | assign]
                  | BIf String BitsyExpr [BitsyExpr] -- keyword (IFZ | IFP | IFN) expr block else-block ended by END
@@ -20,7 +20,10 @@ module Main where
                  deriving Show
 
   spaces :: Parser ()
-  spaces = skipMany1 space
+  spaces = skipMany space
+
+  newlines :: Parser ()
+  newlines = skipMany newline
 
   number :: Parser BitsyExpr
   number = do
