@@ -1,8 +1,13 @@
 {
-  This is a comment
+Description: "Handle precedence of mathematical operators"
 }
 BEGIN
-  IFP 1
-    READ henning
+  IFZ 1 - 1
+    PRINT 1 + 2
+    PRINT 1 + 2 + 3
+  END
+
+  LOOP
+    PRINT 1
   END
 END

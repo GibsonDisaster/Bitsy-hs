@@ -1,7 +1,8 @@
+
 module Main where
   import Text.ParserCombinators.Parsec hiding (spaces)
 
-  data BitsyExpr = BProgram [BitsyExpr] BitsyExpr -- COMMENTS BEGIN block END
+  data BitsyExpr = BProgram BitsyExpr [BitsyExpr] -- COMMENTS BEGIN block END
                  | BBlock [BitsyExpr] -- [if | loop | break | print | read | assign]
                  | BIf String BitsyExpr [BitsyExpr] -- keyword (IFZ | IFP | IFN) expr block else-block ended by END
                  | BLoop BitsyExpr -- LOOP <block> END
@@ -14,6 +15,7 @@ module Main where
                  | BSub String
                  | BMul String
                  | BDiv String
+                 | BMod String
                  | BInt Int
                  | BExpression BitsyExpr BitsyExpr BitsyExpr -- var1 operator var2
                  | BComment String
@@ -40,7 +42,7 @@ module Main where
     spaces
     string "="
     spaces
-    expr <- choice [parseLiteral, parseExpr]
+    expr <- (try parseExpr) <|> (try parseLiteral) --choice [parseLiteral, parseExpr]
     return $ BAssign vn expr
 
   parseRead :: Parser BitsyExpr
@@ -66,7 +68,8 @@ module Main where
     spaces
     string "PRINT"
     spaces
-    tp <- (try parseExpr) <|> (try parseVar) <|> (try parseLiteral)
+    tp <- (try parseExpr) <|> (try parseLiteral) <|> (try parseVar)
+    newline
     return $ BPrint tp
 
   parseBreak :: Parser BitsyExpr
@@ -78,24 +81,25 @@ module Main where
     string "LOOP"
     newline
     b <- parseBlock
+    newlines
     spaces
     string "END"
-    newline
     return $ BLoop b
 
   parseExpr :: Parser BitsyExpr
   parseExpr = do
+    spaces
     num1 <- (try number) <|> (try parseVar)
     spaces
-    op <- oneOf ['+', '-', '*', '/']
+    op <- oneOf ['+', '-', '*', '/', '%']
     spaces
-    num2 <- (try number) <|> (try parseVar)
+    num2 <- (try parseExpr) <|> (try number) <|> (try parseVar)
     let op' = case op of
                 '+' -> BAdd "+"
                 '-' -> BSub "-"
                 '*' -> BMul "*"
                 '/' -> BDiv "/"
-    newlines
+                '%' -> BMod "%"
     return $ BExpression num1 op' num2
 
   parseIf :: Parser BitsyExpr
@@ -108,7 +112,6 @@ module Main where
     b <- parseBlock
     spaces
     string "END"
-    newline
     return $ BIf t expr [b]
 
   parseComment :: Parser BitsyExpr
@@ -118,7 +121,7 @@ module Main where
 
   parseBlock :: Parser BitsyExpr
   parseBlock = do
-    exprs <- many1 $ (try parseIf) <|> (try parseLoop) <|> (try parseRead) <|> (try parsePrint) <|> (try parseAssign) <|> (try parseBreak) <|> (try parseBreak) <|> (try parseExpr)
+    exprs <- many1 $ (try parseIf) <|> (try parseLoop) <|> (try parseRead) <|> (try parsePrint) <|> (try parseAssign) <|> (try parseBreak) <|> (try parseExpr)
     return $ BBlock exprs
 
   parseProgram :: Parser BitsyExpr
@@ -128,8 +131,7 @@ module Main where
     string "BEGIN"
     newline
     mainBlock <- parseBlock
-    string "END"
-    return $ BProgram [mainBlock] comm
+    return $ BProgram comm [mainBlock]
 
   main :: IO ()
   main = do
