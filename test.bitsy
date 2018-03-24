@@ -1,0 +1,16 @@
+{ hjewkahk }
+BEGIN
+  IFP 1 + 1
+    PRINT 116
+    READ henning
+  END
+
+  LOOP
+    IFP 2 + 32
+      PRINT 3
+    END
+    LOOP
+      PRINT 4
+    END
+  END
+END
