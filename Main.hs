@@ -1,10 +1,11 @@
 
 module Main where
-  import Text.ParserCombinators.Parsec hiding (spaces)
+  import Text.ParserCombinators.Parsec
 
-  data BitsyExpr = BProgram BitsyExpr [BitsyExpr] -- COMMENTS BEGIN block END
+  data BitsyExpr = BProgram BitsyExpr BitsyExpr -- COMMENTS BEGIN block END
                  | BBlock [BitsyExpr] -- [if | loop | break | print | read | assign]
-                 | BIf String BitsyExpr [BitsyExpr] -- keyword (IFZ | IFP | IFN) expr block else-block ended by END
+                 | BIf String BitsyExpr BitsyExpr BitsyExpr -- keyword (IFZ | IFP | IFN) expr block else-block ended by END
+                 | BElse BitsyExpr
                  | BLoop BitsyExpr -- LOOP <block> END
                  | BBreak -- BREAK
                  | BPrint BitsyExpr -- expr
@@ -19,10 +20,8 @@ module Main where
                  | BInt Int
                  | BExpression BitsyExpr BitsyExpr BitsyExpr -- var1 operator var2
                  | BComment String
+                 | BVoid
                  deriving Show
-
-  spaces :: Parser ()
-  spaces = skipMany space
 
   newlines :: Parser ()
   newlines = skipMany newline
@@ -42,7 +41,7 @@ module Main where
     spaces
     string "="
     spaces
-    expr <- (try parseExpr) <|> (try parseLiteral) --choice [parseLiteral, parseExpr]
+    expr <- (try parseExpr) <|> (try parseLiteral) <|> (try parseVar)
     return $ BAssign vn expr
 
   parseRead :: Parser BitsyExpr
@@ -107,12 +106,21 @@ module Main where
     spaces
     t <- (try (string "IFP")) <|> (try (string "IFZ")) <|> (try (string "IFN"))
     spaces
-    expr <- (try parseExpr) <|> (try parseLiteral)
+    expr <- (try parseExpr) <|> (try parseLiteral) <|> (try parseVar)
     newline
     b <- parseBlock
     spaces
+    b1 <- optionMaybe (try parseElse)
+    spaces
     string "END"
-    return $ BIf t expr [b]
+    return $ BIf t expr b (case b1 of { (Just s) -> s; Nothing -> (BElse BVoid) })
+
+  parseElse :: Parser BitsyExpr
+  parseElse = do
+    string "ELSE"
+    newline
+    b1 <- parseBlock
+    return $ BElse b1
 
   parseComment :: Parser BitsyExpr
   parseComment = do
@@ -133,7 +141,7 @@ module Main where
     mainBlock <- parseBlock
     newlines
     string "END"
-    return $ BProgram comm [mainBlock]
+    return $ BProgram comm mainBlock
 
   main :: IO ()
   main = do
