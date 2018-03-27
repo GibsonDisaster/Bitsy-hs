@@ -1,5 +1,6 @@
-
 module Main where
+  import Data.Functor.Identity
+  import Text.Parsec (Parsec, ParsecT, modifyState)
   import Text.ParserCombinators.Parsec
 
   data BitsyExpr = BProgram BitsyExpr BitsyExpr -- COMMENTS BEGIN block END
@@ -23,28 +24,48 @@ module Main where
                  | BVoid
                  deriving Show
 
-  newlines :: Parser ()
+  data ParserState = ParserState {
+    declaredVars :: [BitsyExpr],
+    usedVars :: [BitsyExpr],
+    isError :: Bool,
+    errors :: [String]
+  } deriving Show
+
+  addUsedVar :: BitsyExpr -> ParserState -> ParserState
+  addUsedVar s ps = ps { usedVars = (usedVars ps) ++ [s] }
+
+  addDecVar :: BitsyExpr -> ParserState -> ParserState
+  addDecVar s ps = ps { declaredVars = (declaredVars ps) ++ [s] }
+
+  addErrorMsg :: String -> ParserState -> ParserState
+  addErrorMsg s ps = ps { errors = (errors ps) ++ [s] }
+
+  makeCrash :: ParserState -> ParserState
+  makeCrash ps = ps { isError = True }
+
+  newlines :: ParsecT [Char] ParserState Identity ()
   newlines = skipMany newline
 
-  number :: Parser BitsyExpr
+  number :: ParsecT [Char] ParserState Identity BitsyExpr
   number = do
     ds <- many1 digit
     return $ BInt (read ds)
 
-  word :: Parser String
+  word :: ParsecT [Char] ParserState Identity String
   word = many1 (oneOf (['a'..'z'] ++ ['A'..'Z']))
 
-  parseAssign :: Parser BitsyExpr
+  parseAssign :: ParsecT [Char] ParserState Identity BitsyExpr
   parseAssign = do
     spaces
     vn <- parseVar
+    modifyState (addDecVar vn)
     spaces
     string "="
     spaces
     expr <- (try parseExpr) <|> (try parseLiteral) <|> (try parseVar)
     return $ BAssign vn expr
 
-  parseRead :: Parser BitsyExpr
+  parseRead :: ParsecT [Char] ParserState Identity BitsyExpr
   parseRead = do
     spaces
     string "READ"
@@ -52,17 +73,18 @@ module Main where
     v <- word
     return $ BRead (BVarName v)
 
-  parseLiteral :: Parser BitsyExpr
+  parseLiteral :: ParsecT [Char] ParserState Identity BitsyExpr
   parseLiteral = do
     n <- number
     return n
 
-  parseVar :: Parser BitsyExpr
+  parseVar :: ParsecT [Char] ParserState Identity BitsyExpr
   parseVar = do
     w <- word
+    modifyState (addUsedVar (BVarName w))
     return $ BVarName w
 
-  parsePrint :: Parser BitsyExpr
+  parsePrint :: ParsecT [Char] ParserState Identity BitsyExpr
   parsePrint = do
     spaces
     string "PRINT"
@@ -71,10 +93,10 @@ module Main where
     newline
     return $ BPrint tp
 
-  parseBreak :: Parser BitsyExpr
+  parseBreak :: ParsecT [Char] ParserState Identity BitsyExpr
   parseBreak = spaces >> string "BREAK" >> newline >> return BBreak
 
-  parseLoop :: Parser BitsyExpr
+  parseLoop :: ParsecT [Char] ParserState Identity BitsyExpr
   parseLoop = do
     spaces
     string "LOOP"
@@ -85,7 +107,7 @@ module Main where
     string "END"
     return $ BLoop b
 
-  parseExpr :: Parser BitsyExpr
+  parseExpr :: ParsecT [Char] ParserState Identity BitsyExpr
   parseExpr = do
     spaces
     num1 <- (try number) <|> (try parseVar)
@@ -101,7 +123,7 @@ module Main where
                 '%' -> BMod "%"
     return $ BExpression num1 op' num2
 
-  parseIf :: Parser BitsyExpr
+  parseIf :: ParsecT [Char] ParserState Identity BitsyExpr
   parseIf = do
     spaces
     t <- (try (string "IFP")) <|> (try (string "IFZ")) <|> (try (string "IFN"))
@@ -115,24 +137,24 @@ module Main where
     string "END"
     return $ BIf t expr b (case b1 of { (Just s) -> s; Nothing -> (BElse BVoid) })
 
-  parseElse :: Parser BitsyExpr
+  parseElse :: ParsecT [Char] ParserState Identity BitsyExpr
   parseElse = do
     string "ELSE"
     newline
     b1 <- parseBlock
     return $ BElse b1
 
-  parseComment :: Parser BitsyExpr
+  parseComment :: ParsecT [Char] ParserState Identity BitsyExpr
   parseComment = do
     conts <- between (char '{') (char '}') (many (noneOf ['}']))
     return $ BComment conts
 
-  parseBlock :: Parser BitsyExpr
+  parseBlock :: ParsecT [Char] ParserState Identity BitsyExpr
   parseBlock = do
     exprs <- many1 $ (try parseIf) <|> (try parseLoop) <|> (try parseRead) <|> (try parsePrint) <|> (try parseAssign) <|> (try parseBreak) <|> (try parseExpr)
     return $ BBlock exprs
 
-  parseProgram :: Parser BitsyExpr
+  parseProgram :: Parsec [Char] ParserState (BitsyExpr, ParserState)
   parseProgram = do
     comm <- parseComment
     newline
@@ -141,11 +163,12 @@ module Main where
     mainBlock <- parseBlock
     newlines
     string "END"
-    return $ BProgram comm mainBlock
+    n <- getState
+    return $ (BProgram comm mainBlock, n)
 
   main :: IO ()
   main = do
     input <- readFile "test.bitsy"
-    case parse parseProgram "error!" input of
-      Right s -> putStrLn (show s)
+    case runParser parseProgram (ParserState [] [] False []) "ERROR" input of
+      Right (s, n) -> putStrLn $ (show s) ++ " " ++ (show n)
       Left e -> putStrLn (show e)

@@ -1,13 +1,10 @@
 {
-Description: "Handle precedence of mathematical operators"
+  Description: Program to calculate the factorial of a number
 }
 BEGIN
-  IFZ 1 - 1
-    PRINT 1 + 2
-    PRINT 1 + 2 + 3
-  END
+  x = 49
 
-  LOOP
-    PRINT 1
+  IFZ y
+    PRINT 2
   END
 END
