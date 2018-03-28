@@ -1,47 +1,11 @@
 module Main where
   import Data.Functor.Identity
+  import Data.List (nub)
+  import System.Process
   import Text.Parsec (Parsec, ParsecT, modifyState)
   import Text.ParserCombinators.Parsec
-
-  data BitsyExpr = BProgram BitsyExpr BitsyExpr -- COMMENTS BEGIN block END
-                 | BBlock [BitsyExpr] -- [if | loop | break | print | read | assign]
-                 | BIf String BitsyExpr BitsyExpr BitsyExpr -- keyword (IFZ | IFP | IFN) expr block else-block ended by END
-                 | BElse BitsyExpr
-                 | BLoop BitsyExpr -- LOOP <block> END
-                 | BBreak -- BREAK
-                 | BPrint BitsyExpr -- expr
-                 | BRead BitsyExpr -- var-name
-                 | BVarName String
-                 | BAssign BitsyExpr BitsyExpr -- var-name expr
-                 | BAdd String
-                 | BSub String
-                 | BMul String
-                 | BDiv String
-                 | BMod String
-                 | BInt Int
-                 | BExpression BitsyExpr BitsyExpr BitsyExpr -- var1 operator var2
-                 | BComment String
-                 | BVoid
-                 deriving Show
-
-  data ParserState = ParserState {
-    declaredVars :: [BitsyExpr],
-    usedVars :: [BitsyExpr],
-    isError :: Bool,
-    errors :: [String]
-  } deriving Show
-
-  addUsedVar :: BitsyExpr -> ParserState -> ParserState
-  addUsedVar s ps = ps { usedVars = (usedVars ps) ++ [s] }
-
-  addDecVar :: BitsyExpr -> ParserState -> ParserState
-  addDecVar s ps = ps { declaredVars = (declaredVars ps) ++ [s] }
-
-  addErrorMsg :: String -> ParserState -> ParserState
-  addErrorMsg s ps = ps { errors = (errors ps) ++ [s] }
-
-  makeCrash :: ParserState -> ParserState
-  makeCrash ps = ps { isError = True }
+  import BitsyGen
+  import BitsyTypes
 
   newlines :: ParsecT [Char] ParserState Identity ()
   newlines = skipMany newline
@@ -164,11 +128,14 @@ module Main where
     newlines
     string "END"
     n <- getState
-    return $ (BProgram comm mainBlock, n)
+    let varlist = BVarList $ map (\s -> BDecVar s) (nub (declaredVars n))
+    return $ (BProgram comm mainBlock varlist, n)
 
   main :: IO ()
   main = do
-    input <- readFile "test.bitsy"
-    case runParser parseProgram (ParserState [] [] False []) "ERROR" input of
-      Right (s, n) -> putStrLn $ (show s) ++ " " ++ (show n)
-      Left e -> putStrLn (show e)
+    input <- readFile "main.bitsy"
+    let (parseResult, endState) = case runParser parseProgram (ParserState [] [] False []) "ERROR" input of
+                  Right (s, n) -> (s, n)
+                  Left e -> (BError e, ParserState [] [] True [])
+    if (not (isError endState)) then (writeFile "main.c" (compile parseResult) >> putStrLn "Parsing Complete" >> runCommand "gcc -o main main.c && rm main.c" >> putStrLn "Compilation complete, created \"main\"") else (mapM_ putStrLn (errors endState) >> putStrLn (show parseResult))
+    

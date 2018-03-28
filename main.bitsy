@@ -1,0 +1,11 @@
+{
+  Description: Program to calculate the factorial of a number
+}
+BEGIN
+  x = 10
+  PRINT x
+  x = x - 1
+  PRINT x
+  x = x - 1
+  PRINT x
+END
