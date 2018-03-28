@@ -2,6 +2,7 @@ module Main where
   import Data.Functor.Identity
   import Data.List (nub)
   import System.Process
+  import System.Environment
   import Text.Parsec (Parsec, ParsecT, modifyState)
   import Text.ParserCombinators.Parsec
   import BitsyGen
@@ -133,9 +134,11 @@ module Main where
 
   main :: IO ()
   main = do
+    fileName <- head <$> getArgs
     input <- readFile "main.bitsy"
+    let output = (reverse . drop 6 . reverse) fileName
     let (parseResult, endState) = case runParser parseProgram (ParserState [] [] False []) "ERROR" input of
-                  Right (s, n) -> (s, n)
-                  Left e -> (BError e, ParserState [] [] True [])
-    if (not (isError endState)) then (writeFile "main.c" (compile parseResult) >> putStrLn "Parsing Complete" >> runCommand "gcc -o main main.c && rm main.c" >> putStrLn "Compilation complete, created \"main\"") else (mapM_ putStrLn (errors endState) >> putStrLn (show parseResult))
+                                    Right (s, n) -> (s, n)
+                                    Left e -> (BError e, ParserState [] [] True [])
+    if (not (isError endState)) then (writeFile (output ++ ".c") (compile parseResult) >> putStrLn "Parsing Complete" >> runCommand ("gcc -o " ++ output ++ " " ++ output ++ ".c && rm main.c") >> putStrLn "Compilation complete, created \"main\"") else (mapM_ putStrLn (errors endState) >> putStrLn (show parseResult))
     
